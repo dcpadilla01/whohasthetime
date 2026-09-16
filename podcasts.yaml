@@ -1,0 +1,36 @@
+# One entry per show. Only `name` and `feed` are required.
+#   interests:        free text passed to the summarizer so the "worth listening" score reflects YOU
+#   youtube_channel:  optional; enables free caption lookup before paying for transcription
+#   max_minutes:      optional; skip Whisper for episodes longer than this (cost guard)
+podcasts:
+  - name: The Startup Ideas Podcast
+    feed: https://rss2.flightcast.com/ordbkg8yojpehffas7vr7qpc.xml
+    interests: >
+      Startup ideas
+    youtube_channel: https://www.youtube.com/@examplechannel
+    max_minutes: 150
+
+  - name: Latent Space
+    feed: https://api.substack.com/feed/podcast/1084089.rss
+    interests: >
+      AI engineering.
+
+  - name: Lenny's Podcast
+    feed: https://api.substack.com/feed/podcast/10845.rss
+    interests: >
+       Product engineering.
+
+  - name: Super Data Science
+    feed: https://feeds.megaphone.fm/SUPERDATASCIENCEPTYLTD9836501887
+    interests: >
+      Data Science, AI.
+
+  - name: David Senra
+    feed: https://feeds.megaphone.fm/david-senra
+    interests: >
+      Founders, VC, business.
+
+  - name: The a16z show 
+    feed: https://feeds.simplecast.com/JGE3yC0V
+    interests: >
+      Startups, AI, buiness. 

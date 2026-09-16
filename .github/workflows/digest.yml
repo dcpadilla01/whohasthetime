@@ -1,0 +1,61 @@
+name: Podcast digest
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 13:00 UTC = 07:00 Guadalajara (CST, no DST)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "run | seed | dry-run"
+        default: "run"
+      since_hours:
+        description: "look-back window in hours"
+        default: "48"
+
+concurrency:
+  group: podcast-digest
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg (Whisper fallback)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - run: pip install -r requirements.txt
+
+      - name: Run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5' }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'run' }}"
+          SINCE="${{ github.event.inputs.since_hours || '48' }}"
+          case "$MODE" in
+            seed)    python main.py --seed ;;
+            dry-run) python main.py --dry-run --since-hours "$SINCE" ;;
+            *)       python main.py --since-hours "$SINCE" ;;
+          esac
+
+      - name: Commit state
+        run: |
+          git config user.name "podcast-digest bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add state/seen.sqlite
+          git diff --cached --quiet || git commit -m "state: $(date -u +%F)" && git push
