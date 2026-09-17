@@ -12,7 +12,13 @@ from typing import Optional
 
 import requests
 
-UA = {"User-Agent": "podcast-digest/1.0 (+https://github.com)"}
+UA = {"User-Agent": "whohasthetime/1.0 (+https://github.com/dcpadilla01/whohasthetime)"}
+
+# Any OpenAI-compatible /audio/transcriptions endpoint. Default is Groq's hosted Whisper turbo,
+# roughly 9x cheaper than OpenAI's whisper-1 (Groq's whisper-large-v3 is more accurate at ~3x cheaper).
+# To use OpenAI instead:  TRANSCRIBE_BASE_URL=https://api.openai.com/v1  TRANSCRIBE_MODEL=whisper-1
+TRANSCRIBE_BASE_URL = os.environ.get("TRANSCRIBE_BASE_URL", "https://api.groq.com/openai/v1")
+TRANSCRIBE_MODEL = os.environ.get("TRANSCRIBE_MODEL", "whisper-large-v3-turbo")
 
 
 # ---------- 1. Feed-native <podcast:transcript> ----------
@@ -107,18 +113,20 @@ def _from_youtube(ep) -> Optional[str]:
         return None
 
 
-# ---------- 3. Whisper API on downloaded audio ----------
+# ---------- 3. Whisper-style API on downloaded audio ----------
 
 def _from_whisper(ep) -> Optional[str]:
-    if not ep.audio_url or not os.environ.get("OPENAI_API_KEY"):
+    api_key = os.environ.get("TRANSCRIBE_API_KEY")
+    if not ep.audio_url or not api_key:
         return None
     cap = ep.show.max_minutes
     if cap and ep.duration_min and ep.duration_min > cap:
-        print(f"[transcripts] skipping Whisper: {ep.duration_min:.0f} min > max_minutes={cap}")
+        print(f"[transcripts] skipping transcription: {ep.duration_min:.0f} min > max_minutes={cap}")
         return None
 
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(base_url=TRANSCRIBE_BASE_URL, api_key=api_key)
+    print(f"[transcripts] transcribing with {TRANSCRIBE_MODEL} via {TRANSCRIBE_BASE_URL}")
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -138,7 +146,7 @@ def _from_whisper(ep) -> Optional[str]:
         parts = []
         for chunk in sorted(tmp.glob("chunk_*.mp3")):
             with open(chunk, "rb") as f:
-                resp = client.audio.transcriptions.create(model="whisper-1", file=f, response_format="text")
+                resp = client.audio.transcriptions.create(model=TRANSCRIBE_MODEL, file=f, response_format="text")
             parts.append(resp if isinstance(resp, str) else getattr(resp, "text", str(resp)))
         return "\n".join(parts)
 

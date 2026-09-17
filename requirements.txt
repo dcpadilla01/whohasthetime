@@ -1,7 +1,6 @@
 feedparser>=6.0
 PyYAML>=6.0
 requests>=2.31
-anthropic>=0.40
 openai>=1.40
 youtube-transcript-api>=0.6
 yt-dlp>=2024.8.6

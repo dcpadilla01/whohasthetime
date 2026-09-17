@@ -1,0 +1,11 @@
+# OS / editor
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# NOTE: state/ is intentionally NOT ignored. The workflow commits state/seen.sqlite
+# back to the repo so episodes are never processed twice.

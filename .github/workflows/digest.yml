@@ -31,19 +31,21 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install ffmpeg (Whisper fallback)
+      - name: Install ffmpeg (audio transcription fallback)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - run: pip install -r requirements.txt
 
       - name: Run
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TRANSCRIBE_API_KEY: ${{ secrets.TRANSCRIBE_API_KEY }}
+          TRANSCRIBE_BASE_URL: ${{ vars.TRANSCRIBE_BASE_URL || 'https://api.groq.com/openai/v1' }}
+          TRANSCRIBE_MODEL: ${{ vars.TRANSCRIBE_MODEL || 'whisper-large-v3-turbo' }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           DIGEST_TO: ${{ secrets.DIGEST_TO }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5' }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'anthropic/claude-sonnet-5' }}
         run: |
           MODE="${{ github.event.inputs.mode || 'run' }}"
           SINCE="${{ github.event.inputs.since_hours || '48' }}"

@@ -1,12 +1,19 @@
-"""Summarize one transcript with Claude into a fixed JSON structure."""
+"""Summarize one transcript into a fixed JSON structure.
+
+Talks to OpenRouter (or any OpenAI-compatible endpoint) so the model is a config choice,
+not a code choice. Set SUMMARY_MODEL to any OpenRouter id, e.g.
+  anthropic/claude-sonnet-5, openai/gpt-5.4-mini, google/gemini-3.5-flash
+"""
 import json
 import os
 import re
 
-import anthropic
+from openai import OpenAI
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5")
-MAX_CHARS = 600_000  # ~150k tokens; a 3-hour episode is well under this
+MODEL = os.environ.get("SUMMARY_MODEL", "anthropic/claude-sonnet-5")
+BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+# ~150k tokens by default; a 3-hour episode is well under this. Lower it for small-context models.
+MAX_CHARS = int(os.environ.get("SUMMARY_MAX_CHARS", 600_000))
 
 SYSTEM = """You write concise summaries of podcast episodes for one busy reader.
 Summaries must be in your own words. Never reproduce passages from the transcript;
@@ -24,8 +31,16 @@ Respond with JSON only, no markdown fences, matching exactly:
 Scoring: 5 = drop everything and listen, 3 = summary is enough, 1 = irrelevant to this reader."""
 
 
+def _client() -> OpenAI:
+    return OpenAI(
+        base_url=BASE_URL,
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        # Optional OpenRouter attribution headers; harmless on other OpenAI-compatible servers.
+        default_headers={"HTTP-Referer": "https://github.com/dcpadilla01/whohasthetime", "X-Title": "whohasthetime"},
+    )
+
+
 def summarize(ep, transcript: str) -> dict:
-    client = anthropic.Anthropic()
     user = f"""Podcast: {ep.podcast}
 Episode: {ep.title}
 Published: {ep.published.date() if ep.published else "unknown"}
@@ -36,13 +51,15 @@ Reader's interests for this show: {ep.show.interests or "not specified — score
 TRANSCRIPT:
 {transcript[:MAX_CHARS]}"""
 
-    msg = client.messages.create(
+    resp = _client().chat.completions.create(
         model=MODEL,
         max_tokens=1500,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": user}],
+        messages=[
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": user},
+        ],
     )
-    raw = "".join(b.text for b in msg.content if b.type == "text")
+    raw = resp.choices[0].message.content or ""
     raw = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
     try:
         return json.loads(raw)
