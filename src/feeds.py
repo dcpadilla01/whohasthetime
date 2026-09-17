@@ -5,7 +5,17 @@ from time import mktime
 from typing import Optional
 
 import feedparser
+import requests
 import yaml
+
+# We fetch feeds ourselves instead of letting feedparser do it: some hosts (Substack behind Cloudflare)
+# hand a challenge page to obvious bot user agents coming from datacenter IPs such as GitHub Actions,
+# and feedparser then reports a confusing XML error with no HTTP context.
+FEED_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/128.0 Safari/537.36 whohasthetime/1.0 (+https://github.com/dcpadilla01/whohasthetime)",
+    "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+}
 
 
 @dataclass
@@ -87,14 +97,32 @@ def _entry_to_episode(show: Show, e) -> Episode:
     )
 
 
+def _parse_feed(show: Show):
+    """Download the feed and hand the bytes to feedparser. Returns None (after logging enough
+    to debug from the Actions log alone) when the response isn't a usable feed."""
+    try:
+        r = requests.get(show.feed, headers=FEED_HEADERS, timeout=60)
+        r.raise_for_status()
+    except Exception as ex:
+        print(f"[feeds] WARN fetch failed for {show.name}: {ex}")
+        return None
+    parsed = feedparser.parse(r.content)
+    if parsed.bozo and not parsed.entries:
+        snippet = r.content[:200].decode("utf-8", "replace").replace("\n", " ")
+        print(f"[feeds] WARN could not parse {show.name}: {parsed.bozo_exception} "
+              f"(HTTP {r.status_code}, {r.headers.get('content-type', '?')}, {len(r.content)} bytes) "
+              f"body starts: {snippet!r}")
+        return None
+    return parsed
+
+
 def fetch_new(shows: list[Show], con, is_seen, since_hours: int = 48) -> list[Episode]:
     """Episodes published within `since_hours` that aren't marked seen."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=since_hours)
     new = []
     for show in shows:
-        parsed = feedparser.parse(show.feed)
-        if parsed.bozo and not parsed.entries:
-            print(f"[feeds] WARN could not parse {show.name}: {parsed.bozo_exception}")
+        parsed = _parse_feed(show)
+        if parsed is None:
             continue
         for e in parsed.entries:
             ep = _entry_to_episode(show, e)
@@ -110,6 +138,9 @@ def all_episodes(shows: list[Show]) -> list[Episode]:
     """Used by --seed to mark the current back-catalogue as seen."""
     out = []
     for show in shows:
-        for e in feedparser.parse(show.feed).entries:
+        parsed = _parse_feed(show)
+        if parsed is None:
+            continue
+        for e in parsed.entries:
             out.append(_entry_to_episode(show, e))
     return out

@@ -56,8 +56,19 @@ jobs:
           esac
 
       - name: Commit state
+        # dry-run writes nothing worth keeping; skip so a test run never touches main
+        if: ${{ (github.event.inputs.mode || 'run') != 'dry-run' }}
         run: |
-          git config user.name "podcast-digest bot"
+          git config user.name "whohasthetime bot"
           git config user.email "actions@users.noreply.github.com"
           git add state/seen.sqlite
-          git diff --cached --quiet || git commit -m "state: $(date -u +%F)" && git push
+          if git diff --cached --quiet; then echo "state unchanged"; exit 0; fi
+          git commit -m "state: $(date -u +%F)"
+          # GitHub occasionally rejects a push transiently; losing the state commit would
+          # mean re-processing (and re-emailing) the same episodes tomorrow, so retry.
+          for attempt in 1 2 3; do
+            if git pull --rebase -q origin main && git push origin main; then exit 0; fi
+            echo "push attempt $attempt failed; retrying in 15s"; sleep 15
+          done
+          echo "::error::could not push state/seen.sqlite after 3 attempts"
+          exit 1
